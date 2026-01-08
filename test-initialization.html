@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pewpi-shared Initialization Test</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #0e0e0e;
+      color: #0f0;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 { color: #ff69b4; }
+    .test { margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.05); }
+    .pass { color: #0f0; }
+    .fail { color: #f00; }
+    .info { color: #ff0; }
+  </style>
+</head>
+<body>
+  <h1>🧪 pewpi-shared Initialization Test</h1>
+  <div id="results"></div>
+
+  <!-- Load pewpi-shared with defensive initialization -->
+  <script src="src/pewpi-shared/auth-service.js"></script>
+  <script src="src/pewpi-shared/token-service.js"></script>
+  <script src="src/pewpi-shared/wallet-unified.js"></script>
+  <script src="src/pewpi-shared/integration-listener.js"></script>
+  <script src="src/pewpi-shared/machines/adapter.js"></script>
+  <script src="src/pewpi-shared/ui-shims.js"></script>
+
+  <script>
+    const results = [];
+
+    function log(message, type = 'info') {
+      results.push({ message, type });
+      const div = document.createElement('div');
+      div.className = `test ${type}`;
+      div.textContent = message;
+      document.getElementById('results').appendChild(div);
+    }
+
+    async function runTests() {
+      log('=== Starting Defensive Initialization Tests ===', 'info');
+
+      // Test 1: Services are defined
+      try {
+        log('TEST 1: Check services are available...', 'info');
+        if (typeof AuthService === 'function') log('✓ AuthService available', 'pass');
+        else throw new Error('AuthService not available');
+        
+        if (typeof TokenService === 'function') log('✓ TokenService available', 'pass');
+        else throw new Error('TokenService not available');
+        
+        if (typeof WalletUnified === 'function') log('✓ WalletUnified available', 'pass');
+        else throw new Error('WalletUnified not available');
+        
+        if (typeof IntegrationListener === 'function') log('✓ IntegrationListener available', 'pass');
+        else throw new Error('IntegrationListener not available');
+        
+        if (typeof MachineAdapter === 'function') log('✓ MachineAdapter available', 'pass');
+        else throw new Error('MachineAdapter not available');
+        
+        if (typeof UIShims === 'object') log('✓ UIShims available', 'pass');
+        else throw new Error('UIShims not available');
+      } catch (error) {
+        log('✗ ' + error.message, 'fail');
+      }
+
+      // Test 2: Can create instances without errors
+      try {
+        log('\nTEST 2: Create service instances...', 'info');
+        const auth = new AuthService();
+        log('✓ AuthService instance created', 'pass');
+        
+        const tokens = new TokenService();
+        log('✓ TokenService instance created', 'pass');
+        
+        const wallet = new WalletUnified({ tokenService: tokens });
+        log('✓ WalletUnified instance created', 'pass');
+        
+        const integration = new IntegrationListener({ 
+          authService: auth, 
+          tokenService: tokens, 
+          walletService: wallet 
+        });
+        log('✓ IntegrationListener instance created', 'pass');
+        
+        const machine = new MachineAdapter({
+          authService: auth,
+          tokenService: tokens,
+          walletService: wallet,
+          integrationListener: integration
+        });
+        log('✓ MachineAdapter instance created', 'pass');
+      } catch (error) {
+        log('✗ Error creating instances: ' + error.message, 'fail');
+      }
+
+      // Test 3: Services can initialize
+      try {
+        log('\nTEST 3: Initialize services...', 'info');
+        const auth = new AuthService();
+        const result1 = await auth.initialize();
+        if (result1.success) log('✓ AuthService initialized', 'pass');
+        else log('✗ AuthService init failed: ' + result1.error, 'fail');
+        
+        const tokens = new TokenService();
+        const result2 = await tokens.initialize();
+        if (result2.success) log('✓ TokenService initialized', 'pass');
+        else log('✗ TokenService init failed: ' + result2.error, 'fail');
+        
+        const wallet = new WalletUnified({ tokenService: tokens });
+        const result3 = await wallet.initialize();
+        if (result3.success) log('✓ WalletUnified initialized', 'pass');
+        else log('✗ WalletUnified init failed: ' + result3.error, 'fail');
+        
+        const integration = new IntegrationListener({ 
+          authService: auth, 
+          tokenService: tokens, 
+          walletService: wallet 
+        });
+        const result4 = await integration.initialize();
+        if (result4.success) log('✓ IntegrationListener initialized', 'pass');
+        else log('✗ IntegrationListener init failed: ' + result4.error, 'fail');
+        
+        const machine = new MachineAdapter({
+          authService: auth,
+          tokenService: tokens,
+          walletService: wallet,
+          integrationListener: integration
+        });
+        const result5 = await machine.initialize();
+        if (result5.success) log('✓ MachineAdapter initialized', 'pass');
+        else log('✗ MachineAdapter init failed: ' + result5.error, 'fail');
+      } catch (error) {
+        log('✗ Error during initialization: ' + error.message, 'fail');
+      }
+
+      // Test 4: Services handle errors gracefully
+      try {
+        log('\nTEST 4: Error handling...', 'info');
+        const tokens = new TokenService();
+        await tokens.initialize();
+        
+        // Try to get non-existent token
+        const result = await tokens.getToken('nonexistent');
+        if (result.success && result.token === null) {
+          log('✓ Handles missing token gracefully', 'pass');
+        } else {
+          log('✗ Error handling failed', 'fail');
+        }
+        
+        // Try to update non-existent token
+        const result2 = await tokens.updateToken('nonexistent', { value: 100 });
+        if (!result2.success && result2.error) {
+          log('✓ Returns error for invalid operations', 'pass');
+        } else {
+          log('✗ Should have returned error', 'fail');
+        }
+      } catch (error) {
+        log('✗ Error handling test failed: ' + error.message, 'fail');
+      }
+
+      // Test 5: Basic operations work
+      try {
+        log('\nTEST 5: Basic operations...', 'info');
+        const auth = new AuthService();
+        await auth.initialize();
+        
+        const signInResult = await auth.signIn({ handle: 'testuser' });
+        if (signInResult.success) log('✓ Sign in works', 'pass');
+        else log('✗ Sign in failed', 'fail');
+        
+        if (auth.isAuthenticated()) log('✓ Auth state correct', 'pass');
+        else log('✗ Auth state incorrect', 'fail');
+        
+        const tokens = new TokenService();
+        await tokens.initialize();
+        
+        const createResult = await tokens.createToken({ value: 29, type: '🧱🍄⭐' });
+        if (createResult.success && createResult.token) {
+          log('✓ Token creation works', 'pass');
+        } else {
+          log('✗ Token creation failed', 'fail');
+        }
+        
+        const wallet = new WalletUnified({ tokenService: tokens });
+        await wallet.initialize();
+        
+        const addResult = await wallet.addFunds(100);
+        if (addResult.success && addResult.balance === 100) {
+          log('✓ Wallet operations work', 'pass');
+        } else {
+          log('✗ Wallet operations failed', 'fail');
+        }
+      } catch (error) {
+        log('✗ Basic operations test failed: ' + error.message, 'fail');
+      }
+
+      // Test 6: UI components work
+      try {
+        log('\nTEST 6: UI components...', 'info');
+        
+        const indicator = UIShims.createStatusIndicator('test');
+        if (indicator instanceof HTMLElement) {
+          log('✓ Status indicator created', 'pass');
+        } else {
+          log('✗ Status indicator failed', 'fail');
+        }
+        
+        const gate = UIShims.createAuthGate(() => {});
+        if (gate instanceof HTMLElement) {
+          log('✓ Auth gate created', 'pass');
+        } else {
+          log('✗ Auth gate failed', 'fail');
+        }
+        
+        const wallet = UIShims.createWalletDisplay(100);
+        if (wallet instanceof HTMLElement) {
+          log('✓ Wallet display created', 'pass');
+        } else {
+          log('✗ Wallet display failed', 'fail');
+        }
+      } catch (error) {
+        log('✗ UI components test failed: ' + error.message, 'fail');
+      }
+
+      // Summary
+      const passed = results.filter(r => r.type === 'pass').length;
+      const failed = results.filter(r => r.type === 'fail').length;
+      log(`\n=== SUMMARY: ${passed} passed, ${failed} failed ===`, 
+          failed === 0 ? 'pass' : 'fail');
+      
+      if (failed === 0) {
+        log('✅ All tests passed! Library is ready for production.', 'pass');
+      } else {
+        log('⚠️ Some tests failed. Review the output above.', 'fail');
+      }
+    }
+
+    // Run tests when page loads
+    window.addEventListener('DOMContentLoaded', runTests);
+  </script>
+</body>
+</html>

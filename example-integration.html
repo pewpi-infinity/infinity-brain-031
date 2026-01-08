@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pewpi-shared Example Integration</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0e0e0e;
+      color: #e6edf3;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .section {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .section h2 {
+      margin-top: 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 10px;
+    }
+    button {
+      background: #ff69b4;
+      color: white;
+      border: 0;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    button:hover {
+      background: #ff1493;
+    }
+    button:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+    input {
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      margin-right: 10px;
+    }
+    .status {
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 10px;
+      background: rgba(0, 0, 0, 0.3);
+      font-family: monospace;
+      font-size: 14px;
+    }
+    .tokens-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🐶 pewpi-shared Integration Example</h1>
+
+  <div class="section">
+    <h2>🔧 Service Status</h2>
+    <div id="service-status" class="status">Initializing services...</div>
+  </div>
+
+  <div class="section">
+    <h2>🔐 Authentication</h2>
+    <div>
+      <input type="text" id="auth-handle" placeholder="Enter handle" value="testuser" />
+      <button onclick="signIn()">Sign In</button>
+      <button onclick="signOut()">Sign Out</button>
+    </div>
+    <div id="auth-status" class="status">Not authenticated</div>
+  </div>
+
+  <div class="section">
+    <h2>💰 Wallet</h2>
+    <div>
+      <input type="number" id="fund-amount" placeholder="Amount" value="100" />
+      <button onclick="addFunds()">Add Funds</button>
+      <button onclick="showTransactions()">Show Transactions</button>
+    </div>
+    <div id="wallet-status" class="status">Balance: $0.00</div>
+  </div>
+
+  <div class="section">
+    <h2>🪙 Tokens</h2>
+    <div>
+      <input type="text" id="token-name" placeholder="Token name" value="Brain Token" />
+      <input type="number" id="token-value" placeholder="Value" value="29" />
+      <button onclick="createToken()">Create Token</button>
+      <button onclick="purchaseToken()">Purchase with Wallet</button>
+      <button onclick="listTokens()">Refresh List</button>
+    </div>
+    <div id="tokens-list" class="tokens-list"></div>
+  </div>
+
+  <div class="section">
+    <h2>⚙️ State Machine</h2>
+    <div>
+      <button onclick="showState()">Show State</button>
+      <button onclick="showHistory()">Show History</button>
+    </div>
+    <div id="machine-status" class="status">Current state: idle</div>
+  </div>
+
+  <div class="section">
+    <h2>📊 Integration Events</h2>
+    <div>
+      <button onclick="clearEvents()">Clear Events</button>
+    </div>
+    <div id="events-log" class="status" style="max-height: 200px; overflow-y: auto;"></div>
+  </div>
+
+  <!-- Load pewpi-shared library -->
+  <script src="src/pewpi-shared/auth-service.js"></script>
+  <script src="src/pewpi-shared/token-service.js"></script>
+  <script src="src/pewpi-shared/wallet-unified.js"></script>
+  <script src="src/pewpi-shared/integration-listener.js"></script>
+  <script src="src/pewpi-shared/machines/adapter.js"></script>
+  <script src="src/pewpi-shared/ui-shims.js"></script>
+
+  <script>
+    // Global service instances
+    let authService, tokenService, walletService, integrationListener, machineAdapter;
+    const eventLog = [];
+
+    // Initialize all services
+    async function initializeServices() {
+      try {
+        // Create instances
+        authService = new AuthService();
+        tokenService = new TokenService();
+        walletService = new WalletUnified({ tokenService });
+        integrationListener = new IntegrationListener({
+          authService,
+          tokenService,
+          walletService
+        });
+        machineAdapter = new MachineAdapter({
+          authService,
+          tokenService,
+          walletService,
+          integrationListener
+        });
+
+        // Initialize
+        await authService.initialize();
+        await tokenService.initialize();
+        await walletService.initialize();
+        await integrationListener.initialize();
+        await machineAdapter.initialize();
+
+        // Subscribe to events
+        setupEventListeners();
+
+        updateServiceStatus('✅ All services initialized successfully');
+        updateAuthStatus();
+        updateWalletStatus();
+        updateMachineStatus();
+        listTokens();
+
+      } catch (error) {
+        updateServiceStatus('❌ Initialization error: ' + error.message);
+        console.error('Init error:', error);
+      }
+    }
+
+    // Setup event listeners
+    function setupEventListeners() {
+      integrationListener.on('*', (event) => {
+        logEvent(`${event.service}:${event.type}`, event.data);
+      });
+    }
+
+    // Auth functions
+    async function signIn() {
+      const handle = document.getElementById('auth-handle').value;
+      const result = await authService.signIn({ handle });
+      updateAuthStatus();
+      if (result.success) {
+        UIShims.showNotification('Signed in successfully', 'success');
+      }
+    }
+
+    async function signOut() {
+      await authService.signOut();
+      updateAuthStatus();
+      UIShims.showNotification('Signed out', 'info');
+    }
+
+    // Wallet functions
+    async function addFunds() {
+      const amount = parseFloat(document.getElementById('fund-amount').value);
+      const result = await walletService.addFunds(amount, { source: 'manual' });
+      updateWalletStatus();
+      if (result.success) {
+        UIShims.showNotification(`Added $${amount}`, 'success');
+      }
+    }
+
+    async function showTransactions() {
+      const result = await walletService.getTransactions(10);
+      if (result.success) {
+        console.log('Transactions:', result.transactions);
+        UIShims.showNotification(`${result.transactions.length} transactions (see console)`, 'info');
+      }
+    }
+
+    // Token functions
+    async function createToken() {
+      const name = document.getElementById('token-name').value;
+      const value = parseFloat(document.getElementById('token-value').value);
+      const result = await tokenService.createToken({
+        name,
+        value,
+        type: '🧱🍄⭐'
+      });
+      if (result.success) {
+        listTokens();
+        UIShims.showNotification('Token created', 'success');
+      }
+    }
+
+    async function purchaseToken() {
+      const name = document.getElementById('token-name').value;
+      const value = parseFloat(document.getElementById('token-value').value);
+      const result = await walletService.purchaseToken({
+        name,
+        value,
+        type: '🧱🍄⭐'
+      });
+      if (result.success) {
+        listTokens();
+        updateWalletStatus();
+        UIShims.showNotification('Token purchased', 'success');
+      } else {
+        UIShims.showNotification('Purchase failed: ' + result.error, 'error');
+      }
+    }
+
+    async function listTokens() {
+      const result = await tokenService.getAllTokens();
+      const container = document.getElementById('tokens-list');
+      container.innerHTML = '';
+      
+      if (result.success && result.tokens.length > 0) {
+        result.tokens.forEach(token => {
+          const card = UIShims.createTokenCard(token);
+          container.appendChild(card);
+        });
+      } else {
+        container.innerHTML = '<div class="status">No tokens yet</div>';
+      }
+    }
+
+    // Machine functions
+    function showState() {
+      const state = machineAdapter.getState();
+      console.log('Current state:', state);
+      updateMachineStatus();
+      UIShims.showNotification(`State: ${state.current}`, 'info');
+    }
+
+    function showHistory() {
+      const history = machineAdapter.getHistory(10);
+      console.log('State history:', history);
+      UIShims.showNotification(`${history.length} state changes (see console)`, 'info');
+    }
+
+    // Event log functions
+    function logEvent(type, data) {
+      const event = {
+        time: new Date().toLocaleTimeString(),
+        type,
+        data
+      };
+      eventLog.push(event);
+      updateEventLog();
+    }
+
+    function updateEventLog() {
+      const container = document.getElementById('events-log');
+      const recent = eventLog.slice(-10).reverse();
+      container.innerHTML = recent.map(e => 
+        `[${e.time}] ${e.type}`
+      ).join('<br>') || 'No events yet';
+    }
+
+    function clearEvents() {
+      eventLog.length = 0;
+      updateEventLog();
+    }
+
+    // Status update functions
+    function updateServiceStatus(message) {
+      document.getElementById('service-status').textContent = message;
+    }
+
+    function updateAuthStatus() {
+      const isAuth = authService.isAuthenticated();
+      const user = authService.currentUser;
+      const status = isAuth ? `✅ Authenticated as: ${user.handle}` : '❌ Not authenticated';
+      document.getElementById('auth-status').textContent = status;
+    }
+
+    async function updateWalletStatus() {
+      const result = await walletService.getBalance();
+      document.getElementById('wallet-status').textContent = 
+        `Balance: $${result.balance.toFixed(2)}`;
+    }
+
+    function updateMachineStatus() {
+      const state = machineAdapter.getState();
+      document.getElementById('machine-status').textContent = 
+        `Current state: ${state.current}`;
+    }
+
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', initializeServices);
+  </script>
+</body>
+</html>
