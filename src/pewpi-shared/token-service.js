@@ -110,7 +110,7 @@ class TokenService {
    * Private: Generate unique ID
    */
   _generateId() {
-    return `token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `token_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   /**

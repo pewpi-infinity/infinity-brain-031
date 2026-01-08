@@ -142,7 +142,7 @@ class IntegrationListener {
    * Private: Generate unique ID
    */
   _generateId() {
-    return `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `evt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 }
 

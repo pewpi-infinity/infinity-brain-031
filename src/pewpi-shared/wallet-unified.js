@@ -167,7 +167,7 @@ class WalletUnified {
    * Private: Generate unique ID
    */
   _generateId() {
-    return `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `tx_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   /**
